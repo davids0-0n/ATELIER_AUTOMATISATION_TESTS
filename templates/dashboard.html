@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard — Tests API Frankfurter</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f6fb; color: #222; margin: 0; padding: 20px; }
+        .page { max-width: 1000px; margin: auto; }
+        h1 { margin-bottom: 4px; }
+        .sous-titre { color: #666; margin-top: 0; }
+        .carte { background: white; border-radius: 10px; padding: 16px 20px; margin: 16px 0;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .stats { display: flex; flex-wrap: wrap; gap: 12px; }
+        .stat { flex: 1 1 140px; background: #f4f6fb; border-radius: 8px; padding: 10px; text-align: center; }
+        .stat b { display: block; font-size: 1.5em; }
+        table { width: 100%; border-collapse: collapse; font-size: .92em; }
+        th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #eee; }
+        th { background: #f4f6fb; }
+        .PASS { color: #1a7f37; font-weight: bold; }
+        .FAIL { color: #cf222e; font-weight: bold; }
+        .ERROR { color: #9a6700; font-weight: bold; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        button, .lien { background: #3b5bdb; color: white; border: none; border-radius: 6px;
+                        padding: 9px 16px; cursor: pointer; text-decoration: none; font-size: .95em; }
+        .lien.secondaire { background: #e9ecf5; color: #333; }
+        .alerte { background: #fff4e5; border-left: 4px solid #f08c00; padding: 8px 12px; }
+        .verdict { font-size: 1.1em; }
+        svg { width: 100%; height: auto; background: #fafbfe; border-radius: 6px; }
+        .legende span { margin-right: 16px; }
+        .tableau { overflow-x: auto; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <h1>📊 Tests automatisés — API Frankfurter</h1>
+    <p class="sous-titre">API de taux de change · <code>https://api.frankfurter.app</code></p>
+
+    <div class="actions">
+        <form action="/run" method="post"><button type="submit">▶️ Lancer un run</button></form>
+        <a class="lien secondaire" href="/health">🩺 /health</a>
+        <a class="lien secondaire" href="/export.json">⬇️ Export JSON</a>
+    </div>
+
+    {% if attente %}
+        <p class="alerte">⏳ Anti-spam : un run a déjà eu lieu récemment. Réessayez dans {{ attente }} secondes.</p>
+    {% endif %}
+
+    {% if not dernier %}
+        <div class="carte">Aucun run pour l'instant. Cliquez sur « Lancer un run ».</div>
+    {% else %}
+        {% set s = dernier.summary %}
+        <div class="carte">
+            <h2>Dernier run — {{ dernier.timestamp.replace("T", " à ") }}</h2>
+            <p class="verdict">{{ s.verdict }}</p>
+            <div class="stats">
+                <div class="stat"><b>{{ "🟢 UP" if s.available else "🔴 DOWN" }}</b>Disponibilité</div>
+                <div class="stat"><b>{{ s.passed }}/{{ s.total }}</b>Tests réussis</div>
+                <div class="stat"><b>{{ (s.error_rate * 100) | round(1) }} %</b>Taux d'échec des tests</div>
+                <div class="stat"><b>{{ (s.http_error_rate * 100) | round(1) }} %</b>Erreurs HTTP (timeout, 429, 5xx)</div>
+                <div class="stat"><b>{{ s.latency_ms_avg }} ms</b>Latence moyenne</div>
+                <div class="stat"><b>{{ s.latency_ms_p95 }} ms</b>Latence p95</div>
+            </div>
+            <p><small>{{ s.requests }} requêtes envoyées pendant ce run (maximum 20).</small></p>
+
+            <div class="tableau">
+            <table>
+                <tr><th>Test</th><th>Résultat</th><th>HTTP</th><th>Latence</th><th>Détails</th></tr>
+                {% for t in dernier.tests %}
+                <tr>
+                    <td><b>{{ t.name }}</b><br><small>{{ t.description }}</small></td>
+                    <td class="{{ t.status }}">{{ t.status }}</td>
+                    <td>{{ t.http if t.http else "—" }}</td>
+                    <td>{{ t.latency_ms ~ " ms" if t.latency_ms else "—" }}</td>
+                    <td>{{ t.details }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </div>
+
+        {% if courbes %}
+        <div class="carte">
+            <h2>Tendance de la latence</h2>
+            <p class="legende">
+                <span style="color:#3b5bdb">━ moyenne</span>
+                <span style="color:#f08c00">━ p95</span>
+                <small>(échelle : 0 à {{ courbes.max }} ms, de {{ courbes.debut }} à {{ courbes.fin }})</small>
+            </p>
+            <svg viewBox="0 0 {{ courbes.largeur }} {{ courbes.hauteur }}" preserveAspectRatio="none">
+                <polyline points="{{ courbes.p95 }}" fill="none" stroke="#f08c00" stroke-width="2"/>
+                <polyline points="{{ courbes.avg }}" fill="none" stroke="#3b5bdb" stroke-width="2"/>
+            </svg>
+        </div>
+        {% endif %}
+
+        <div class="carte">
+            <h2>Historique des runs</h2>
+            <div class="tableau">
+            <table>
+                <tr><th>#</th><th>Date</th><th>État</th><th>Tests</th><th>Échecs</th><th>Moy.</th><th>p95</th></tr>
+                {% for r in runs %}
+                <tr>
+                    <td>{{ r.id }}</td>
+                    <td>{{ r.timestamp.replace("T", " ") }}</td>
+                    <td>{{ "🟢" if r.summary.available else "🔴" }}</td>
+                    <td>{{ r.summary.passed }}/{{ r.summary.total }}</td>
+                    <td>{{ (r.summary.error_rate * 100) | round(1) }} %</td>
+                    <td>{{ r.summary.latency_ms_avg }} ms</td>
+                    <td>{{ r.summary.latency_ms_p95 }} ms</td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </div>
+    {% endif %}
+</div>
+</body>
+</html>
