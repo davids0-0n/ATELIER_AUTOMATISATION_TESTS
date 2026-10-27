@@ -51,12 +51,18 @@ qui appelle l'endpoint `/run`. L'anti-spam côté Flask garantit au maximum 1 ru
 - Taux d'erreurs HTTP non voulues (timeout, 429, 5xx)
 - Disponibilité du dernier run (UP si `GET /latest` répond 200)
 
-## Premiers résultats observés
+## Résultats observés
 
-- Premier run : 9/9 tests réussis, API disponible, 0 % d'erreur HTTP
-- Latence moyenne d'environ 310 ms, p95 d'environ 1 500 ms
-- Interprétation : avec 14 appels, le p95 correspond pratiquement à l'appel le plus lent.
-  Le premier appel est plus lent car il ouvre la connexion HTTPS (DNS, TLS, proxy PythonAnywhere).
-  Après l'ajout de `requests.Session`, la connexion est réutilisée et la latence se stabilise.
-  Un p95 élevé ponctuel n'indique donc pas une dégradation de l'API : c'est la tendance
-  sur plusieurs runs (courbe du dashboard) qui compte.
+| Run | Connexion | Tests | Latence moyenne | Latence p95 | Verdict |
+|-----|-----------|-------|-----------------|-------------|---------|
+| 27/10 16:20 | nouvelle connexion à chaque appel | 9/9 | 309 ms | 1 498 ms | 🟠 latence dégradée |
+| 27/10 16:38 | connexion réutilisée (`requests.Session`) | 9/9 | 127 ms | 349 ms | 🟢 OK |
+
+Interprétation :
+- L'API respecte son contrat (9/9 tests) et reste disponible, sans erreur HTTP (0 % de timeout, 429 ou 5xx).
+- Lors du premier run, chaque appel rouvrait une connexion HTTPS (DNS, TLS, proxy PythonAnywhere).
+  Avec 14 appels, le p95 correspond pratiquement à l'appel le plus lent, d'où un p95 élevé.
+- En réutilisant la connexion (keep-alive), la latence moyenne est divisée par 2,4 et le p95 par 4,3.
+  Le ralentissement venait donc de notre client, pas de l'API.
+- Un p95 élevé ponctuel n'est pas forcément une dégradation : c'est la tendance sur plusieurs runs
+  (courbe du dashboard) qui permet de conclure.
