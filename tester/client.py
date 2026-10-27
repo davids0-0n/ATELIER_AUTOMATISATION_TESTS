@@ -27,13 +27,14 @@ class Client:
         self.base_url = base_url
         self.nb_requetes = 0
         self.appels = []  # historique de tous les appels (pour la QoS)
+        self.session = requests.Session()  # réutilise la même connexion (keep-alive)
 
     def _une_requete(self, chemin, params):
         if self.nb_requetes >= MAX_REQUESTS_PAR_RUN:
             raise BudgetDepasse(f"Budget de {MAX_REQUESTS_PAR_RUN} requêtes atteint")
         self.nb_requetes += 1
         debut = time.perf_counter()
-        reponse = requests.get(self.base_url + chemin, params=params, timeout=TIMEOUT_S)
+        reponse = self.session.get(self.base_url + chemin, params=params, timeout=TIMEOUT_S)
         latence_ms = round((time.perf_counter() - debut) * 1000, 1)
         return reponse, latence_ms
 
